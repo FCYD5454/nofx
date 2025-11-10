@@ -131,6 +131,7 @@ export function TraderConfigViewModal({
             </h3>
             <div className="space-y-3">
               <InfoRow label="保证金模式" value={traderData.is_cross_margin ? '全仓' : '逐仓'} />
+              <InfoRow label="扫描间隔" value={`${traderData.scan_interval_minutes} 分钟`} />
               <InfoRow label="BTC/ETH 杠杆" value={`${traderData.btc_eth_leverage}x`} />
               <InfoRow label="山寨币杠杆" value={`${traderData.altcoin_leverage}x`} />
               <InfoRow 

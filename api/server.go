@@ -210,6 +210,7 @@ type CreateTraderRequest struct {
 	AIModelID            string  `json:"ai_model_id" binding:"required"`
 	ExchangeID           string  `json:"exchange_id" binding:"required"`
 	InitialBalance       float64 `json:"initial_balance"`
+	ScanIntervalMinutes  int     `json:"scan_interval_minutes"`  // 扫描间隔（分钟）
 	BTCETHLeverage       int     `json:"btc_eth_leverage"`
 	AltcoinLeverage      int     `json:"altcoin_leverage"`
 	TradingSymbols       string  `json:"trading_symbols"`
@@ -271,6 +272,12 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 		return
 	}
 
+	// 校验扫描间隔
+	if req.ScanIntervalMinutes != 0 && (req.ScanIntervalMinutes < 1 || req.ScanIntervalMinutes > 60) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "扫描间隔必须在1-60分钟之间"})
+		return
+	}
+	
 	// 校验杠杆值
 	if req.BTCETHLeverage < 0 || req.BTCETHLeverage > 50 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "BTC/ETH杠杆必须在1-50倍之间"})
@@ -331,6 +338,12 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 	if req.SystemPromptTemplate != "" {
 		systemPromptTemplate = req.SystemPromptTemplate
 	}
+	
+	// 设置扫描间隔默认值
+	scanIntervalMinutes := 3
+	if req.ScanIntervalMinutes > 0 {
+		scanIntervalMinutes = req.ScanIntervalMinutes
+	}
 
     // 创建交易员配置（数据库实体）
     trader := &config.TraderRecord{
@@ -349,8 +362,8 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 		OverrideBasePrompt:   req.OverrideBasePrompt,
 		SystemPromptTemplate: systemPromptTemplate,
 		IsCrossMargin:        isCrossMargin,
-		ScanIntervalMinutes:  3, // 默认3分钟
-		IsRunning:           false,
+		ScanIntervalMinutes:  scanIntervalMinutes,
+		IsRunning:            false,
 	}
 
 	// 保存到数据库
@@ -379,16 +392,17 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 
 // UpdateTraderRequest 更新交易员请求
 type UpdateTraderRequest struct {
-	Name            string  `json:"name" binding:"required"`
-	AIModelID       string  `json:"ai_model_id" binding:"required"`
-	ExchangeID      string  `json:"exchange_id" binding:"required"`
-	InitialBalance  float64 `json:"initial_balance"`
-	BTCETHLeverage  int     `json:"btc_eth_leverage"`
-	AltcoinLeverage int     `json:"altcoin_leverage"`
-	TradingSymbols  string  `json:"trading_symbols"`
-	CustomPrompt    string  `json:"custom_prompt"`
-	OverrideBasePrompt bool `json:"override_base_prompt"`
-	IsCrossMargin   *bool   `json:"is_cross_margin"`
+	Name                string  `json:"name" binding:"required"`
+	AIModelID           string  `json:"ai_model_id" binding:"required"`
+	ExchangeID          string  `json:"exchange_id" binding:"required"`
+	InitialBalance      float64 `json:"initial_balance"`
+	ScanIntervalMinutes int     `json:"scan_interval_minutes"` // 扫描间隔（分钟）
+	BTCETHLeverage      int     `json:"btc_eth_leverage"`
+	AltcoinLeverage     int     `json:"altcoin_leverage"`
+	TradingSymbols      string  `json:"trading_symbols"`
+	CustomPrompt        string  `json:"custom_prompt"`
+	OverrideBasePrompt  bool    `json:"override_base_prompt"`
+	IsCrossMargin       *bool   `json:"is_cross_margin"`
 }
 
 // handleUpdateTrader 更新交易员配置
@@ -438,6 +452,12 @@ func (s *Server) handleUpdateTrader(c *gin.Context) {
 		altcoinLeverage = existingTrader.AltcoinLeverage // 保持原值
 	}
 	
+	// 设置扫描间隔
+	scanIntervalMinutes := req.ScanIntervalMinutes
+	if scanIntervalMinutes <= 0 {
+		scanIntervalMinutes = existingTrader.ScanIntervalMinutes // 保持原值
+	}
+	
     // 更新交易员配置
     trader := &config.TraderRecord{
 		ID:                  traderID,
@@ -452,8 +472,8 @@ func (s *Server) handleUpdateTrader(c *gin.Context) {
 		CustomPrompt:        req.CustomPrompt,
 		OverrideBasePrompt:  req.OverrideBasePrompt,
 		IsCrossMargin:       isCrossMargin,
-		ScanIntervalMinutes: existingTrader.ScanIntervalMinutes, // 保持原值
-		IsRunning:           existingTrader.IsRunning,           // 保持原值
+		ScanIntervalMinutes: scanIntervalMinutes,
+		IsRunning:           existingTrader.IsRunning, // 保持原值
 	}
 
 	// 更新数据库
@@ -816,6 +836,7 @@ func (s *Server) handleGetTraderConfig(c *gin.Context) {
 		"ai_model":             aiModelID,
 		"exchange_id":          traderConfig.ExchangeID,
 		"initial_balance":      traderConfig.InitialBalance,
+		"scan_interval_minutes": traderConfig.ScanIntervalMinutes,
 		"btc_eth_leverage":     traderConfig.BTCETHLeverage,
 		"altcoin_leverage":     traderConfig.AltcoinLeverage,
 		"trading_symbols":      traderConfig.TradingSymbols,

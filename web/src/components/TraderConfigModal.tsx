@@ -12,6 +12,8 @@ interface TraderConfigData {
   trader_name: string;
   ai_model: string;
   exchange_id: string;
+  initial_balance: number;
+  scan_interval_minutes: number;
   btc_eth_leverage: number;
   altcoin_leverage: number;
   trading_symbols: string;
@@ -21,7 +23,6 @@ interface TraderConfigData {
   is_cross_margin: boolean;
   use_coin_pool: boolean;
   use_oi_top: boolean;
-  initial_balance: number;
 }
 
 interface TraderConfigModalProps {
@@ -47,6 +48,8 @@ export function TraderConfigModal({
     trader_name: '',
     ai_model: '',
     exchange_id: '',
+    initial_balance: 1000,
+    scan_interval_minutes: 3,
     btc_eth_leverage: 5,
     altcoin_leverage: 3,
     trading_symbols: '',
@@ -56,7 +59,6 @@ export function TraderConfigModal({
     is_cross_margin: true,
     use_coin_pool: false,
     use_oi_top: false,
-    initial_balance: 1000,
   });
   const [isSaving, setIsSaving] = useState(false);
   const [availableCoins, setAvailableCoins] = useState<string[]>([]);
@@ -77,6 +79,8 @@ export function TraderConfigModal({
         trader_name: '',
         ai_model: availableModels[0]?.id || '',
         exchange_id: availableExchanges[0]?.id || '',
+        initial_balance: 1000,
+        scan_interval_minutes: 3,
         btc_eth_leverage: 5,
         altcoin_leverage: 3,
         trading_symbols: '',
@@ -86,7 +90,6 @@ export function TraderConfigModal({
         is_cross_margin: true,
         use_coin_pool: false,
         use_oi_top: false,
-        initial_balance: 1000,
       });
     }
     // 确保旧数据也有默认的 system_prompt_template
@@ -171,6 +174,8 @@ export function TraderConfigModal({
         name: formData.trader_name,
         ai_model_id: formData.ai_model,
         exchange_id: formData.exchange_id,
+        initial_balance: formData.initial_balance,
+        scan_interval_minutes: formData.scan_interval_minutes,
         btc_eth_leverage: formData.btc_eth_leverage,
         altcoin_leverage: formData.altcoin_leverage,
         trading_symbols: formData.trading_symbols,
@@ -180,7 +185,6 @@ export function TraderConfigModal({
         is_cross_margin: formData.is_cross_margin,
         use_coin_pool: formData.use_coin_pool,
         use_oi_top: formData.use_oi_top,
-        initial_balance: formData.initial_balance,
       };
       await onSave(saveData);
       onClose();
@@ -319,7 +323,27 @@ export function TraderConfigModal({
                 </div>
               </div>
 
-              {/* 第二行：杠杆设置 */}
+              {/* 第二行：扫描间隔 */}
+              <div>
+                <label className="text-sm text-[#EAECEF] block mb-2">
+                  扫描间隔（分钟）
+                  <span className="text-xs text-[#848E9C] ml-2">AI 决策频率，建议 1-5 分钟</span>
+                </label>
+                <input
+                  type="number"
+                  value={formData.scan_interval_minutes}
+                  onChange={(e) => handleInputChange('scan_interval_minutes', Number(e.target.value))}
+                  className="w-full px-3 py-2 bg-[#0B0E11] border border-[#2B3139] rounded text-[#EAECEF] focus:border-[#F0B90B] focus:outline-none"
+                  min="1"
+                  max="60"
+                  step="1"
+                />
+                <p className="text-xs text-[#F0B90B] mt-1">
+                  ⚠️ 过短的间隔会增加 AI API 调用成本
+                </p>
+              </div>
+
+              {/* 第三行：杠杆设置 */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm text-[#EAECEF] block mb-2">BTC/ETH 杠杆</label>

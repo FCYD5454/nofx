@@ -125,6 +125,7 @@ export interface CreateTraderRequest {
   ai_model_id: string;
   exchange_id: string;
   initial_balance: number;
+  scan_interval_minutes?: number;
   btc_eth_leverage?: number;
   altcoin_leverage?: number;
   trading_symbols?: string;
@@ -189,6 +190,8 @@ export interface TraderConfigData {
   trader_name: string;
   ai_model: string;
   exchange_id: string;
+  initial_balance: number;
+  scan_interval_minutes: number;
   btc_eth_leverage: number;
   altcoin_leverage: number;
   trading_symbols: string;
@@ -197,6 +200,5 @@ export interface TraderConfigData {
   is_cross_margin: boolean;
   use_coin_pool: boolean;
   use_oi_top: boolean;
-  initial_balance: number;
   is_running: boolean;
 }
