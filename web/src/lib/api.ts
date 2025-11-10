@@ -115,6 +115,20 @@ export const api = {
     return res.json();
   },
 
+  async chatWithAI(traderId: string, question: string): Promise<{
+    response: string;
+    trader_id: string;
+    trader_name: string;
+  }> {
+    const res = await fetch(`${API_BASE}/traders/${traderId}/chat`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ question }),
+    });
+    if (!res.ok) throw new Error('AI对话失败');
+    return res.json();
+  },
+
   async updateTraderPrompt(traderId: string, customPrompt: string): Promise<void> {
     const res = await fetch(`${API_BASE}/traders/${traderId}/prompt`, {
       method: 'PUT',

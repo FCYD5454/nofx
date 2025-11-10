@@ -399,6 +399,9 @@ function TraderDetailsPage({
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [previewData, setPreviewData] = useState<any>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [chatInput, setChatInput] = useState('');
+  const [chatMessages, setChatMessages] = useState<Array<{role: 'user' | 'ai', content: string, timestamp: string}>>([]);
+  const [isChatLoading, setIsChatLoading] = useState(false);
 
   const handleManualDecision = async (traderId: string) => {
     if (isTriggering || cooldownSeconds > 0) {
@@ -538,6 +541,35 @@ function TraderDetailsPage({
     setPreviewData(null);
     // 執行實際決策
     await handleManualDecision(traderId);
+  };
+
+  const handleSendChatMessage = async (traderId: string) => {
+    if (!chatInput.trim() || isChatLoading) return;
+
+    const userMessage = chatInput.trim();
+    const timestamp = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+    
+    // 添加用戶消息
+    setChatMessages(prev => [...prev, { role: 'user', content: userMessage, timestamp }]);
+    setChatInput('');
+    setIsChatLoading(true);
+
+    try {
+      const response = await api.chatWithAI(traderId, userMessage);
+      const aiTimestamp = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+      
+      // 添加 AI 回復
+      setChatMessages(prev => [...prev, { role: 'ai', content: response.response, timestamp: aiTimestamp }]);
+    } catch (error) {
+      console.error('AI 對話失敗:', error);
+      setChatMessages(prev => [...prev, { 
+        role: 'ai', 
+        content: '❌ 抱歉，AI 無法回應您的問題。請稍後再試。', 
+        timestamp: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
+      }]);
+    } finally {
+      setIsChatLoading(false);
+    }
   };
 
   if (!selectedTrader) {
@@ -1005,6 +1037,124 @@ function TraderDetailsPage({
                 <div className="text-sm" style={{ color: '#848E9C' }}>{t('aiDecisionsWillAppear', language)}</div>
               </div>
             )}
+          </div>
+
+          {/* AI 聊天區塊 */}
+          <div className="mt-6 pt-6 border-t" style={{ borderColor: '#2B3139' }}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl" style={{
+                background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)'
+              }}>
+                💬
+              </div>
+              <div>
+                <h3 className="text-lg font-bold" style={{ color: '#EAECEF' }}>AI 助手</h3>
+                <div className="text-xs" style={{ color: '#848E9C' }}>詢問交易狀況與策略建議</div>
+              </div>
+            </div>
+
+            {/* 聊天訊息列表 */}
+            <div className="space-y-3 mb-4 overflow-y-auto" style={{ maxHeight: '300px' }}>
+              {chatMessages.length === 0 ? (
+                <div className="text-center py-8" style={{ color: '#848E9C' }}>
+                  <div className="text-4xl mb-2 opacity-30">💬</div>
+                  <div className="text-sm">向 AI 提問關於交易的任何問題</div>
+                  <div className="text-xs mt-2">例如：「為什麼持有這個倉位？」</div>
+                </div>
+              ) : (
+                chatMessages.map((msg, idx) => (
+                  <div 
+                    key={idx}
+                    className="flex gap-2"
+                    style={{ flexDirection: msg.role === 'user' ? 'row-reverse' : 'row' }}
+                  >
+                    <div 
+                      className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm"
+                      style={{
+                        background: msg.role === 'user' 
+                          ? 'linear-gradient(135deg, #F0B90B 0%, #E1A706 100%)'
+                          : 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                        color: '#000'
+                      }}
+                    >
+                      {msg.role === 'user' ? '👤' : '🤖'}
+                    </div>
+                    <div 
+                      className="flex-1 p-3 rounded-lg"
+                      style={{
+                        background: msg.role === 'user' ? '#2B3139' : '#0B0E11',
+                        border: '1px solid #2B3139',
+                        maxWidth: '85%'
+                      }}
+                    >
+                      <div className="text-sm whitespace-pre-wrap" style={{ color: '#EAECEF' }}>
+                        {msg.content}
+                      </div>
+                      <div className="text-xs mt-1" style={{ color: '#848E9C', textAlign: msg.role === 'user' ? 'right' : 'left' }}>
+                        {msg.timestamp}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+              {isChatLoading && (
+                <div className="flex gap-2">
+                  <div 
+                    className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm"
+                    style={{ background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', color: '#000' }}
+                  >
+                    🤖
+                  </div>
+                  <div className="flex-1 p-3 rounded-lg" style={{ background: '#0B0E11', border: '1px solid #2B3139' }}>
+                    <div className="flex gap-1">
+                      <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#10B981' }}></div>
+                      <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#10B981', animationDelay: '0.2s' }}></div>
+                      <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#10B981', animationDelay: '0.4s' }}></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 輸入框 */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendChatMessage(selectedTrader.trader_id);
+                  }
+                }}
+                placeholder="輸入問題... (Enter 發送)"
+                disabled={isChatLoading}
+                className="flex-1 px-3 py-2 rounded text-sm"
+                style={{
+                  background: '#0B0E11',
+                  border: '1px solid #2B3139',
+                  color: '#EAECEF',
+                  outline: 'none'
+                }}
+              />
+              <button
+                onClick={() => handleSendChatMessage(selectedTrader.trader_id)}
+                disabled={!chatInput.trim() || isChatLoading}
+                className="px-4 py-2 rounded text-sm font-semibold transition-all duration-200 hover:scale-105 disabled:opacity-50"
+                style={{
+                  background: !chatInput.trim() || isChatLoading
+                    ? 'linear-gradient(135deg, #848E9C 0%, #6B7280 100%)'
+                    : 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                  color: '#000',
+                  border: 'none',
+                  cursor: !chatInput.trim() || isChatLoading ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {isChatLoading ? '⏳' : '發送'}
+              </button>
+            </div>
           </div>
         </div>
         {/* 右侧结束 */}

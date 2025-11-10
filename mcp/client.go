@@ -116,6 +116,11 @@ func (client *Client) SetClient(Client Client) {
 	client = &Client
 }
 
+// Chat 用于简单的对话场景（单个 prompt）
+func (client *Client) Chat(prompt string) (string, error) {
+	return client.CallWithMessages("", prompt)
+}
+
 // CallWithMessages 使用 system + user prompt 调用AI API（推荐）
 func (client *Client) CallWithMessages(systemPrompt, userPrompt string) (string, error) {
 	if client.APIKey == "" {

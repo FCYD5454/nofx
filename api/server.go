@@ -103,6 +103,7 @@ func (s *Server) setupRoutes() {
 			protected.POST("/traders/:id/trigger-decision", s.handleTriggerManualDecision)
 			protected.POST("/traders/:id/trigger-decision-batch", s.handleTriggerBatchDecision)
 			protected.POST("/traders/:id/preview-decision", s.handlePreviewDecision)
+			protected.POST("/traders/:id/chat", s.handleChatWithAI)
 			protected.PUT("/traders/:id/prompt", s.handleUpdateTraderPrompt)
 
 			// AI模型配置
@@ -710,6 +711,44 @@ func (s *Server) handlePreviewDecision(c *gin.Context) {
 		"cot_trace": decision.CoTTrace,
 		"decisions": decision.Decisions,
 		"decision_count": len(decision.Decisions),
+	})
+}
+
+// handleChatWithAI 与AI对话，AI可以访问完整的交易数据
+func (s *Server) handleChatWithAI(c *gin.Context) {
+	traderID := c.Param("id")
+	
+	trader, err := s.traderManager.GetTrader(traderID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "交易员不存在"})
+		return
+	}
+	
+	// 获取用户问题
+	var req struct {
+		Question string `json:"question" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式错误，需要 question 字段"})
+		return
+	}
+	
+	// 调用 AI 进行对话
+	response, err := trader.ChatWithAI(req.Question)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": fmt.Sprintf("AI对话失败: %v", err),
+		})
+		return
+	}
+	
+	log.Printf("✓ AI对话成功 [%s] - 问题长度: %d, 回答长度: %d", 
+		trader.GetName(), len(req.Question), len(response))
+	c.JSON(http.StatusOK, gin.H{
+		"trader_id": traderID,
+		"trader_name": trader.GetName(),
+		"question": req.Question,
+		"response": response,
 	})
 }
 

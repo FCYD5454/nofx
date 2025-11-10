@@ -311,6 +311,111 @@ func (at *AutoTrader) PreviewDecision() (*decision.Decision, error) {
 	return aiDecision, nil
 }
 
+// ChatWithAI 与AI进行对话，AI可以访问完整的交易数据
+func (at *AutoTrader) ChatWithAI(userQuestion string) (string, error) {
+	log.Printf("💬 用户提问 [%s]: %s", at.name, userQuestion)
+	
+	// 1. 收集完整的交易上下文
+	ctx, err := at.buildTradingContext()
+	if err != nil {
+		return "", fmt.Errorf("构建交易上下文失败: %w", err)
+	}
+	
+	// 2. 获取最近的决策历史（最近10条）
+	recentDecisions, err := at.decisionLogger.GetLatestRecords(10)
+	if err != nil {
+		log.Printf("⚠️ 获取决策历史失败: %v", err)
+		recentDecisions = nil
+	}
+	
+	// 3. 构建聊天 prompt
+	chatPrompt := at.buildChatPrompt(ctx, recentDecisions, userQuestion)
+	
+	// 4. 调用 AI 进行对话
+	log.Printf("🤖 正在请求AI回答...")
+	response, err := at.mcpClient.Chat(chatPrompt)
+	if err != nil {
+		return "", fmt.Errorf("AI对话失败: %w", err)
+	}
+	
+	log.Printf("✓ AI回答成功，长度: %d 字符", len(response))
+	return response, nil
+}
+
+// buildChatPrompt 构建聊天提示词
+func (at *AutoTrader) buildChatPrompt(ctx *decision.Context, recentDecisions []*logger.DecisionRecord, userQuestion string) string {
+	prompt := fmt.Sprintf(`你是一个专业的AI交易助手，正在为交易员 "%s" 提供咨询服务。
+
+【当前交易状态】
+- 时间: %s
+- 账户净值: %.2f USDT
+- 可用余额: %.2f USDT
+- 总盈亏: %.2f USDT (%.2f%%)
+- 持仓数量: %d 个
+- 保证金使用率: %.1f%%
+- 运行时间: %d 分钟
+- 决策周期数: %d
+
+`, at.name, ctx.CurrentTime, ctx.Account.TotalEquity, ctx.Account.AvailableBalance,
+		ctx.Account.TotalPnL, ctx.Account.TotalPnLPct, ctx.Account.PositionCount,
+		ctx.Account.MarginUsedPct, ctx.RuntimeMinutes, ctx.CallCount)
+	
+	// 添加持仓信息
+	if len(ctx.Positions) > 0 {
+		prompt += "【当前持仓】\n"
+		for _, pos := range ctx.Positions {
+			prompt += fmt.Sprintf("- %s %s: 入场 %.4f, 当前 %.4f, 盈亏 %.2f USDT (%.2f%%), 杠杆 %dx\n",
+				pos.Symbol, pos.Side, pos.EntryPrice, pos.MarkPrice,
+				pos.UnrealizedPnL, pos.UnrealizedPnLPct, pos.Leverage)
+		}
+	} else {
+		prompt += "【当前持仓】\n无持仓\n"
+	}
+	
+	// 添加交易表现
+	if ctx.Performance != nil {
+		prompt += fmt.Sprintf("\n【交易表现】\n")
+		prompt += fmt.Sprintf("- 总交易数: %d 笔\n", ctx.Performance.TotalTrades)
+		prompt += fmt.Sprintf("- 胜率: %.1f%% (%d 胜 / %d 负)\n",
+			ctx.Performance.WinRate, ctx.Performance.WinCount, ctx.Performance.LossCount)
+		prompt += fmt.Sprintf("- 平均盈利: %.2f USDT\n", ctx.Performance.AvgWin)
+		prompt += fmt.Sprintf("- 平均亏损: %.2f USDT\n", ctx.Performance.AvgLoss)
+		prompt += fmt.Sprintf("- 盈亏比: %.2f\n", ctx.Performance.ProfitLossRatio)
+		prompt += fmt.Sprintf("- 夏普比率: %.2f\n", ctx.Performance.SharpeRatio)
+	}
+	
+	// 添加最近决策历史
+	if len(recentDecisions) > 0 {
+		prompt += fmt.Sprintf("\n【最近决策历史】（最近 %d 条）\n", len(recentDecisions))
+		for i, record := range recentDecisions {
+			if i >= 5 { // 只显示最近5条
+				break
+			}
+			status := "成功"
+			if !record.Success {
+				status = "失败"
+			}
+			prompt += fmt.Sprintf("- 周期 #%d (%s) - %s: %d 个操作\n",
+				record.CycleNumber, record.Timestamp.Format("01/02 15:04"), status, len(record.Decisions))
+		}
+	}
+	
+	// 添加用户问题
+	prompt += fmt.Sprintf("\n【用户提问】\n%s\n", userQuestion)
+	
+	prompt += `
+【回答要求】
+1. 基于以上真实数据进行分析和回答
+2. 如果用户询问具体交易决策，请结合当前持仓和市场状况给出专业建议
+3. 如果用户询问历史表现，请基于统计数据进行解释
+4. 回答要简洁明了，使用繁体中文
+5. 如果数据不足以回答问题，请坦诚说明
+
+请回答用户的问题：`
+	
+	return prompt
+}
+
 // runCycle 运行一个交易周期（使用AI全权决策）
 func (at *AutoTrader) runCycle() error {
 	at.callCount++
