@@ -1113,21 +1113,20 @@ func (s *Server) handlePositions(c *gin.Context) {
 	// 增强持仓数据：为每个持仓加入最后决策信息
 	enhancedPositions := make([]map[string]interface{}, 0, len(positions))
 	for _, pos := range positions {
-		posData := map[string]interface{}{
-			"symbol":            pos.Symbol,
-			"side":              pos.Side,
-			"position_amt":      pos.PositionAmt,
-			"entry_price":       pos.EntryPrice,
-			"mark_price":        pos.MarkPrice,
-			"unrealized_profit": pos.UnrealizedProfit,
-			"unrealized_pnl_pct": pos.UnrealizedPnlPct,
-			"leverage":          pos.Leverage,
-			"liquidation_price": pos.LiquidationPrice,
-			"margin_used":       pos.MarginUsed,
+		// 创建增强后的持仓数据（保留原有字段）
+		posData := make(map[string]interface{})
+		for k, v := range pos {
+			posData[k] = v
+		}
+
+		// 获取 symbol 字段
+		symbol, ok := pos["symbol"].(string)
+		if !ok {
+			continue
 		}
 
 		// 加入最后决策信息
-		if lastDecision, exists := lastDecisionMap[pos.Symbol]; exists {
+		if lastDecision, exists := lastDecisionMap[symbol]; exists {
 			posData["last_decision_time"] = lastDecision["timestamp"]
 			posData["last_decision_action"] = lastDecision["action"]
 			posData["last_decision_price"] = lastDecision["price"]
