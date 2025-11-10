@@ -602,18 +602,28 @@ func (s *Server) handleTriggerManualDecision(c *gin.Context) {
 		return
 	}
 	
-	// 异步执行决策，避免阻塞 HTTP 请求
-	go func() {
-		log.Printf("👆 手动触发决策 - Trader: %s", trader.GetName())
-		if err := trader.TriggerManualDecision(); err != nil {
-			log.Printf("❌ 手动决策执行失败 [%s]: %v", trader.GetName(), err)
-		} else {
-			log.Printf("✓ 手动决策执行成功 [%s]", trader.GetName())
+	// 同步检查冷却时间（快速失败）
+	err = trader.TriggerManualDecision()
+	if err != nil {
+		// 如果是冷却时间错误，返回 429 Too Many Requests
+		if strings.Contains(err.Error(), "请等待") {
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"error": err.Error(),
+				"retry_after": 30, // 秒
+				"cooldown": true,
+			})
+			return
 		}
-	}()
+		// 其他错误
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": fmt.Sprintf("触发决策失败: %v", err),
+		})
+		return
+	}
 	
+	log.Printf("✓ 手动决策执行成功 [%s]", trader.GetName())
 	c.JSON(http.StatusOK, gin.H{
-		"message": "AI决策已触发，正在执行中...",
+		"message": "AI决策已触发并执行",
 		"trader_id": traderID,
 		"trader_name": trader.GetName(),
 	})

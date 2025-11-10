@@ -395,20 +395,60 @@ function TraderDetailsPage({
 }) {
   const [isTriggering, setIsTriggering] = useState(false);
   const [triggerMessage, setTriggerMessage] = useState<string | null>(null);
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
 
   const handleManualDecision = async (traderId: string) => {
-    if (isTriggering) return;
+    if (isTriggering || cooldownSeconds > 0) {
+      if (cooldownSeconds > 0) {
+        setTriggerMessage(`⏰ 冷卻中，請等待 ${cooldownSeconds} 秒`);
+        setTimeout(() => setTriggerMessage(null), 2000);
+      }
+      return;
+    }
     
     setIsTriggering(true);
     setTriggerMessage(null);
     
     try {
       await api.triggerManualDecision(traderId);
-      setTriggerMessage('✓ AI決策已觸發！正在執行中...');
+      setTriggerMessage('✓ AI決策已觸發並執行！');
       setTimeout(() => setTriggerMessage(null), 3000);
-    } catch (error) {
+      
+      // 開始30秒冷卻倒數
+      setCooldownSeconds(30);
+      const timer = setInterval(() => {
+        setCooldownSeconds(prev => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } catch (error: any) {
       console.error('觸發決策失敗:', error);
-      setTriggerMessage('✗ 觸發失敗，請稍後再試');
+      
+      // 處理429錯誤（冷卻時間）
+      if (error.response?.status === 429) {
+        const errorData = error.response.data;
+        const retryAfter = errorData.retry_after || 30;
+        setTriggerMessage(`⏰ ${errorData.error || '請稍後再試'}`);
+        
+        // 同步冷卻計時器
+        setCooldownSeconds(retryAfter);
+        const timer = setInterval(() => {
+          setCooldownSeconds(prev => {
+            if (prev <= 1) {
+              clearInterval(timer);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      } else {
+        setTriggerMessage('✗ 觸發失敗，請稍後再試');
+      }
+      
       setTimeout(() => setTriggerMessage(null), 3000);
     } finally {
       setIsTriggering(false);
@@ -612,20 +652,30 @@ function TraderDetailsPage({
                     <td className="py-3">
                       <button
                         onClick={() => handleManualDecision(selectedTrader.trader_id)}
-                        disabled={isTriggering}
+                        disabled={isTriggering || cooldownSeconds > 0}
                         className="px-3 py-1.5 rounded text-xs font-semibold transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                         style={{
-                          background: isTriggering 
+                          background: isTriggering || cooldownSeconds > 0
                             ? 'linear-gradient(135deg, #848E9C 0%, #6B7280 100%)'
                             : 'linear-gradient(135deg, #F0B90B 0%, #E1A706 100%)',
                           color: '#000',
                           border: 'none',
-                          cursor: isTriggering ? 'not-allowed' : 'pointer',
+                          cursor: isTriggering || cooldownSeconds > 0 ? 'not-allowed' : 'pointer',
                           boxShadow: '0 2px 8px rgba(240, 185, 11, 0.3)'
                         }}
-                        title={isTriggering ? '決策執行中...' : '立即觸發AI決策'}
+                        title={
+                          cooldownSeconds > 0 
+                            ? `冷卻中，還需 ${cooldownSeconds} 秒` 
+                            : isTriggering 
+                              ? '決策執行中...' 
+                              : '立即觸發AI決策（30秒冷卻）'
+                        }
                       >
-                        {isTriggering ? '⏳ 執行中...' : '🤖 AI決策'}
+                        {cooldownSeconds > 0 
+                          ? `⏰ ${cooldownSeconds}s` 
+                          : isTriggering 
+                            ? '⏳ 執行中...' 
+                            : '🤖 AI決策'}
                       </button>
                     </td>
                   </tr>

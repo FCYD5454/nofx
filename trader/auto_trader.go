@@ -10,6 +10,7 @@ import (
 	"nofx/mcp"
 	"nofx/pool"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -98,6 +99,8 @@ type AutoTrader struct {
 	startTime             time.Time        // 系统启动时间
 	callCount             int              // AI调用次数
 	positionFirstSeenTime map[string]int64 // 持仓首次出现时间 (symbol_side -> timestamp毫秒)
+	lastManualTriggerTime time.Time        // 最后一次手动触发时间
+	manualTriggerMutex    sync.Mutex       // 手动触发互斥锁
 }
 
 // NewAutoTrader 创建自动交易器
@@ -253,8 +256,26 @@ func (at *AutoTrader) Stop() {
 	log.Println("⏹ 自动交易系统停止")
 }
 
-// TriggerManualDecision 手动触发一次AI决策（不受 scan_interval 限制）
+// TriggerManualDecision 手动触发一次AI决策（不受 scan_interval 限制，但有冷却时间）
 func (at *AutoTrader) TriggerManualDecision() error {
+	at.manualTriggerMutex.Lock()
+	defer at.manualTriggerMutex.Unlock()
+	
+	// 定义冷却时间（30秒）
+	cooldownDuration := 30 * time.Second
+	
+	// 检查是否在冷却期内
+	if !at.lastManualTriggerTime.IsZero() {
+		elapsed := time.Since(at.lastManualTriggerTime)
+		if elapsed < cooldownDuration {
+			remaining := cooldownDuration - elapsed
+			return fmt.Errorf("请等待 %.0f 秒后再试（冷却时间：30秒）", remaining.Seconds())
+		}
+	}
+	
+	// 更新最后触发时间
+	at.lastManualTriggerTime = time.Now()
+	
 	log.Printf("👆 手动触发AI决策 - Trader: %s", at.name)
 	return at.runCycle()
 }
