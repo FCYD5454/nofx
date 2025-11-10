@@ -39,6 +39,9 @@ export interface Position {
   unrealized_pnl_pct: number;
   liquidation_price: number;
   margin_used: number;
+  last_decision_time?: string;
+  last_decision_action?: string;
+  last_decision_price?: number;
 }
 
 export interface DecisionAction {

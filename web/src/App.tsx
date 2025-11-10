@@ -708,7 +708,27 @@ function TraderDetailsPage({
               <tbody>
                 {positions.map((pos, i) => (
                   <tr key={i} className="border-b border-gray-800 last:border-0">
-                    <td className="py-3 font-mono font-semibold">{pos.symbol}</td>
+                    <td className="py-3">
+                      <div className="font-mono font-semibold">{pos.symbol}</div>
+                      {pos.last_decision_time && (
+                        <div className="text-xs mt-1" style={{ color: '#848E9C' }}>
+                          <div>
+                            最後決策: {new Date(pos.last_decision_time).toLocaleString('zh-TW', { 
+                              month: '2-digit', 
+                              day: '2-digit', 
+                              hour: '2-digit', 
+                              minute: '2-digit' 
+                            })}
+                          </div>
+                          <div className="font-semibold" style={{ 
+                            color: pos.last_decision_action?.includes('open') ? '#0ECB81' : 
+                                   pos.last_decision_action?.includes('close') ? '#F6465D' : '#F0B90B' 
+                          }}>
+                            {pos.last_decision_action}
+                          </div>
+                        </div>
+                      )}
+                    </td>
                     <td className="py-3">
                       <span
                         className="px-2 py-1 rounded text-xs font-bold"

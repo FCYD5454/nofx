@@ -992,7 +992,7 @@ func (s *Server) handleAccount(c *gin.Context) {
 	c.JSON(http.StatusOK, account)
 }
 
-// handlePositions 持仓列表
+// handlePositions 持仓列表（增强版：包含最后决策信息）
 func (s *Server) handlePositions(c *gin.Context) {
 	_, traderID, err := s.getTraderFromQuery(c)
 	if err != nil {
@@ -1014,7 +1014,58 @@ func (s *Server) handlePositions(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, positions)
+	// 获取最近的决策记录（最多50条）以提取每个币种的最后决策
+	records, err := trader.GetDecisionLogger().GetLatestRecords(50)
+	if err != nil {
+		// 如果获取决策历史失败，仍返回持仓但不包含决策信息
+		c.JSON(http.StatusOK, positions)
+		return
+	}
+
+	// 构建 symbol -> 最后决策 的映射
+	lastDecisionMap := make(map[string]map[string]interface{})
+	
+	// 从最后一条记录往前遍历，为每个 symbol 记录第一次（最新的）出现的决策
+	for i := len(records) - 1; i >= 0; i-- {
+		for _, action := range records[i].Decisions {
+			if _, exists := lastDecisionMap[action.Symbol]; !exists {
+				lastDecisionMap[action.Symbol] = map[string]interface{}{
+					"action":    action.Action,
+					"timestamp": action.Timestamp,
+					"price":     action.Price,
+					"success":   action.Success,
+				}
+			}
+		}
+	}
+
+	// 增强持仓数据：为每个持仓加入最后决策信息
+	enhancedPositions := make([]map[string]interface{}, 0, len(positions))
+	for _, pos := range positions {
+		posData := map[string]interface{}{
+			"symbol":            pos.Symbol,
+			"side":              pos.Side,
+			"position_amt":      pos.PositionAmt,
+			"entry_price":       pos.EntryPrice,
+			"mark_price":        pos.MarkPrice,
+			"unrealized_profit": pos.UnrealizedProfit,
+			"unrealized_pnl_pct": pos.UnrealizedPnlPct,
+			"leverage":          pos.Leverage,
+			"liquidation_price": pos.LiquidationPrice,
+			"margin_used":       pos.MarginUsed,
+		}
+
+		// 加入最后决策信息
+		if lastDecision, exists := lastDecisionMap[pos.Symbol]; exists {
+			posData["last_decision_time"] = lastDecision["timestamp"]
+			posData["last_decision_action"] = lastDecision["action"]
+			posData["last_decision_price"] = lastDecision["price"]
+		}
+
+		enhancedPositions = append(enhancedPositions, posData)
+	}
+
+	c.JSON(http.StatusOK, enhancedPositions)
 }
 
 // handleDecisions 决策日志列表
