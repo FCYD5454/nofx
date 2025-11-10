@@ -396,6 +396,9 @@ function TraderDetailsPage({
   const [isTriggering, setIsTriggering] = useState(false);
   const [triggerMessage, setTriggerMessage] = useState<string | null>(null);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewData, setPreviewData] = useState<any>(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
 
   const handleManualDecision = async (traderId: string) => {
     if (isTriggering || cooldownSeconds > 0) {
@@ -513,6 +516,28 @@ function TraderDetailsPage({
     } finally {
       setIsTriggering(false);
     }
+  };
+
+  const handlePreviewDecision = async (traderId: string) => {
+    setIsLoadingPreview(true);
+    try {
+      const preview = await api.previewDecision(traderId);
+      setPreviewData(preview);
+      setShowPreviewModal(true);
+    } catch (error) {
+      console.error('預覽失敗:', error);
+      setTriggerMessage('✗ 預覽失敗，請稍後再試');
+      setTimeout(() => setTriggerMessage(null), 3000);
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  };
+
+  const handleExecutePreviewedDecision = async (traderId: string) => {
+    setShowPreviewModal(false);
+    setPreviewData(null);
+    // 執行實際決策
+    await handleManualDecision(traderId);
   };
 
   if (!selectedTrader) {
@@ -654,6 +679,23 @@ function TraderDetailsPage({
             )}
             {positions && positions.length > 0 && (
               <>
+                <button
+                  onClick={() => handlePreviewDecision(selectedTrader.trader_id)}
+                  disabled={isLoadingPreview}
+                  className="px-3 py-1.5 rounded text-xs font-semibold transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{
+                    background: isLoadingPreview
+                      ? 'linear-gradient(135deg, #848E9C 0%, #6B7280 100%)'
+                      : 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                    color: '#fff',
+                    border: 'none',
+                    cursor: isLoadingPreview ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)'
+                  }}
+                  title={isLoadingPreview ? '正在載入預覽...' : 'AI決策預覽（不執行）'}
+                >
+                  {isLoadingPreview ? '⏳ 載入中...' : '👁️ 預覽'}
+                </button>
                 <button
                   onClick={() => handleBatchDecision(selectedTrader.trader_id)}
                   disabled={isTriggering || cooldownSeconds > 0}
@@ -797,6 +839,133 @@ function TraderDetailsPage({
             <div className="text-6xl mb-4 opacity-50">📊</div>
             <div className="text-lg font-semibold mb-2">{t('noPositions', language)}</div>
             <div className="text-sm">{t('noActivePositions', language)}</div>
+          </div>
+        )}
+
+        {/* Preview Decision Modal */}
+        {showPreviewModal && previewData && (
+          <div 
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: 'rgba(0, 0, 0, 0.7)' }}
+            onClick={() => setShowPreviewModal(false)}
+          >
+            <div 
+              className="binance-card p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-bold flex items-center gap-2" style={{ color: '#EAECEF' }}>
+                  👁️ AI 決策預覽
+                </h2>
+                <button 
+                  onClick={() => setShowPreviewModal(false)}
+                  className="text-2xl hover:scale-110 transition-transform"
+                  style={{ color: '#848E9C' }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="mb-4 p-3 rounded" style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                <p className="text-sm" style={{ color: '#10B981' }}>
+                  ℹ️ 這是 AI 基於當前市場條件的建議決策。點擊「執行決策」將實際執行這些操作。
+                </p>
+              </div>
+
+              {/* AI 思維鏈 */}
+              {previewData.cot_trace && (
+                <div className="mb-4">
+                  <h3 className="text-lg font-semibold mb-2" style={{ color: '#F0B90B' }}>
+                    💭 AI 推理過程
+                  </h3>
+                  <div 
+                    className="rounded p-4 text-sm font-mono whitespace-pre-wrap max-h-64 overflow-y-auto"
+                    style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
+                  >
+                    {previewData.cot_trace}
+                  </div>
+                </div>
+              )}
+
+              {/* 建議的決策 */}
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold mb-2" style={{ color: '#EAECEF' }}>
+                  📋 建議操作 ({previewData.decision_count} 個)
+                </h3>
+                {previewData.decisions && previewData.decisions.length > 0 ? (
+                  <div className="space-y-2">
+                    {previewData.decisions.map((action: any, idx: number) => (
+                      <div 
+                        key={idx}
+                        className="flex items-center justify-between p-3 rounded"
+                        style={{ background: '#0B0E11', border: '1px solid #2B3139' }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono font-bold" style={{ color: '#EAECEF' }}>
+                            {action.symbol}
+                          </span>
+                          <span
+                            className="px-2 py-1 rounded text-xs font-bold"
+                            style={{
+                              background: action.action.includes('open') 
+                                ? 'rgba(14, 203, 129, 0.1)' 
+                                : action.action.includes('close')
+                                  ? 'rgba(246, 70, 93, 0.1)'
+                                  : 'rgba(240, 185, 11, 0.1)',
+                              color: action.action.includes('open')
+                                ? '#0ECB81'
+                                : action.action.includes('close')
+                                  ? '#F6465D'
+                                  : '#F0B90B'
+                            }}
+                          >
+                            {action.action}
+                          </span>
+                          {action.leverage && (
+                            <span className="text-xs" style={{ color: '#F0B90B' }}>
+                              {action.leverage}x
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center p-4" style={{ color: '#848E9C' }}>
+                    AI 建議維持當前持倉，無需操作
+                  </div>
+                )}
+              </div>
+
+              {/* 操作按鈕 */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => handleExecutePreviewedDecision(selectedTrader.trader_id)}
+                  disabled={isTriggering || cooldownSeconds > 0}
+                  className="flex-1 py-3 rounded font-semibold transition-all duration-200 hover:scale-105 disabled:opacity-50"
+                  style={{
+                    background: isTriggering || cooldownSeconds > 0
+                      ? 'linear-gradient(135deg, #848E9C 0%, #6B7280 100%)'
+                      : 'linear-gradient(135deg, #0ECB81 0%, #0B9F6E 100%)',
+                    color: '#000',
+                    border: 'none'
+                  }}
+                >
+                  {isTriggering ? '⏳ 執行中...' : cooldownSeconds > 0 ? `⏰ ${cooldownSeconds}s` : '✓ 執行決策'}
+                </button>
+                <button
+                  onClick={() => setShowPreviewModal(false)}
+                  className="flex-1 py-3 rounded font-semibold transition-all duration-200 hover:scale-105"
+                  style={{
+                    background: 'linear-gradient(135deg, #F6465D 0%, #D93E4F 100%)',
+                    color: '#fff',
+                    border: 'none'
+                  }}
+                >
+                  ✗ 取消
+                </button>
+              </div>
+            </div>
           </div>
         )}
           </div>

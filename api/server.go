@@ -102,6 +102,7 @@ func (s *Server) setupRoutes() {
 			protected.POST("/traders/:id/stop", s.handleStopTrader)
 			protected.POST("/traders/:id/trigger-decision", s.handleTriggerManualDecision)
 			protected.POST("/traders/:id/trigger-decision-batch", s.handleTriggerBatchDecision)
+			protected.POST("/traders/:id/preview-decision", s.handlePreviewDecision)
 			protected.PUT("/traders/:id/prompt", s.handleUpdateTraderPrompt)
 
 			// AI模型配置
@@ -678,6 +679,37 @@ func (s *Server) handleTriggerBatchDecision(c *gin.Context) {
 		"trader_id": traderID,
 		"trader_name": trader.GetName(),
 		"position_count": positionCount,
+	})
+}
+
+// handlePreviewDecision 预览AI决策（Dry Run模式）
+func (s *Server) handlePreviewDecision(c *gin.Context) {
+	traderID := c.Param("id")
+	
+	trader, err := s.traderManager.GetTrader(traderID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "交易员不存在"})
+		return
+	}
+	
+	// 调用预览方法（不实际执行交易）
+	decision, err := trader.PreviewDecision()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": fmt.Sprintf("预览决策失败: %v", err),
+		})
+		return
+	}
+	
+	log.Printf("✓ 决策预览成功 [%s] - %d 个建议操作", trader.GetName(), len(decision.Decisions))
+	c.JSON(http.StatusOK, gin.H{
+		"trader_id": traderID,
+		"trader_name": trader.GetName(),
+		"system_prompt": decision.SystemPrompt,
+		"user_prompt": decision.UserPrompt,
+		"cot_trace": decision.CoTTrace,
+		"decisions": decision.Decisions,
+		"decision_count": len(decision.Decisions),
 	})
 }
 

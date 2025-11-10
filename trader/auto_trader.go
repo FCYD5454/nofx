@@ -280,6 +280,37 @@ func (at *AutoTrader) TriggerManualDecision() error {
 	return at.runCycle()
 }
 
+// PreviewDecision 预览AI决策（Dry Run模式，不实际执行交易）
+func (at *AutoTrader) PreviewDecision() (*decision.Decision, error) {
+	log.Printf("👁️ 预览AI决策（Dry Run模式）- Trader: %s", at.name)
+	
+	// 1. 收集交易上下文
+	ctx, err := at.buildTradingContext()
+	if err != nil {
+		return nil, fmt.Errorf("构建交易上下文失败: %w", err)
+	}
+	
+	log.Printf("📊 当前账户净值: %.2f USDT | 可用: %.2f USDT | 持仓: %d",
+		ctx.Account.TotalEquity, ctx.Account.AvailableBalance, ctx.Account.PositionCount)
+	
+	// 2. 调用AI获取决策（但不执行）
+	log.Printf("🤖 正在请求AI分析... [模板: %s]", at.systemPromptTemplate)
+	aiDecision, err := decision.GetFullDecisionWithCustomPrompt(ctx, at.mcpClient, at.customPrompt, at.overrideBasePrompt, at.systemPromptTemplate)
+	if err != nil {
+		return nil, fmt.Errorf("获取AI决策失败: %w", err)
+	}
+	
+	// 3. 验证决策（不执行）
+	err = decision.ValidateDecision(aiDecision, ctx)
+	if err != nil {
+		log.Printf("⚠️ 决策验证警告: %v", err)
+		// 不返回错误，仍然返回决策让用户查看
+	}
+	
+	log.Printf("✓ 预览决策获取成功，包含 %d 个操作", len(aiDecision.Decisions))
+	return aiDecision, nil
+}
+
 // runCycle 运行一个交易周期（使用AI全权决策）
 func (at *AutoTrader) runCycle() error {
 	at.callCount++

@@ -100,6 +100,21 @@ export const api = {
     return res.json();
   },
 
+  async previewDecision(traderId: string): Promise<{
+    cot_trace: string;
+    decisions: any[];
+    decision_count: number;
+    system_prompt: string;
+    user_prompt: string;
+  }> {
+    const res = await fetch(`${API_BASE}/traders/${traderId}/preview-decision`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('预览决策失败');
+    return res.json();
+  },
+
   async updateTraderPrompt(traderId: string, customPrompt: string): Promise<void> {
     const res = await fetch(`${API_BASE}/traders/${traderId}/prompt`, {
       method: 'PUT',
