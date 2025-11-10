@@ -101,6 +101,7 @@ func (s *Server) setupRoutes() {
 			protected.POST("/traders/:id/start", s.handleStartTrader)
 			protected.POST("/traders/:id/stop", s.handleStopTrader)
 			protected.POST("/traders/:id/trigger-decision", s.handleTriggerManualDecision)
+			protected.POST("/traders/:id/trigger-decision-batch", s.handleTriggerBatchDecision)
 			protected.PUT("/traders/:id/prompt", s.handleUpdateTraderPrompt)
 
 			// AI模型配置
@@ -626,6 +627,57 @@ func (s *Server) handleTriggerManualDecision(c *gin.Context) {
 		"message": "AI决策已触发并执行",
 		"trader_id": traderID,
 		"trader_name": trader.GetName(),
+	})
+}
+
+// handleTriggerBatchDecision 批量触发AI决策（对所有持仓重新评估）
+func (s *Server) handleTriggerBatchDecision(c *gin.Context) {
+	traderID := c.Param("id")
+	
+	trader, err := s.traderManager.GetTrader(traderID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "交易员不存在"})
+		return
+	}
+	
+	// 获取当前持仓数量
+	positions, err := trader.GetPositions()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取持仓失败"})
+		return
+	}
+	
+	positionCount := len(positions)
+	if positionCount == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "当前没有持仓"})
+		return
+	}
+	
+	// 同步检查冷却时间（快速失败）
+	err = trader.TriggerManualDecision()
+	if err != nil {
+		// 如果是冷却时间错误，返回 429 Too Many Requests
+		if strings.Contains(err.Error(), "请等待") {
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"error": err.Error(),
+				"retry_after": 30, // 秒
+				"cooldown": true,
+			})
+			return
+		}
+		// 其他错误
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": fmt.Sprintf("触发批量决策失败: %v", err),
+		})
+		return
+	}
+	
+	log.Printf("✓ 批量决策执行成功 [%s] - 影响 %d 个持仓", trader.GetName(), positionCount)
+	c.JSON(http.StatusOK, gin.H{
+		"message": fmt.Sprintf("批量AI决策已触发，正在重新评估 %d 个持仓", positionCount),
+		"trader_id": traderID,
+		"trader_name": trader.GetName(),
+		"position_count": positionCount,
 	})
 }
 

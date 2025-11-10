@@ -78,7 +78,26 @@ export const api = {
       method: 'POST',
       headers: getAuthHeaders(),
     });
-    if (!res.ok) throw new Error('触发手动决策失败');
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      const error: any = new Error(errorData.error || '触发手动决策失败');
+      error.response = { status: res.status, data: errorData };
+      throw error;
+    }
+  },
+
+  async triggerBatchDecision(traderId: string): Promise<{ position_count: number }> {
+    const res = await fetch(`${API_BASE}/traders/${traderId}/trigger-decision-batch`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      const error: any = new Error(errorData.error || '触发批量决策失败');
+      error.response = { status: res.status, data: errorData };
+      throw error;
+    }
+    return res.json();
   },
 
   async updateTraderPrompt(traderId: string, customPrompt: string): Promise<void> {

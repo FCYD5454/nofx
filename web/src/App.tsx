@@ -455,6 +455,66 @@ function TraderDetailsPage({
     }
   };
 
+  const handleBatchDecision = async (traderId: string) => {
+    if (isTriggering || cooldownSeconds > 0) {
+      if (cooldownSeconds > 0) {
+        setTriggerMessage(`⏰ 冷卻中，請等待 ${cooldownSeconds} 秒`);
+        setTimeout(() => setTriggerMessage(null), 2000);
+      }
+      return;
+    }
+    
+    setIsTriggering(true);
+    setTriggerMessage(null);
+    
+    try {
+      const result = await api.triggerBatchDecision(traderId);
+      setTriggerMessage(`✓ 批量AI決策已觸發！正在重新評估 ${result.position_count} 個持倉`);
+      setTimeout(() => setTriggerMessage(null), 4000);
+      
+      // 開始30秒冷卻倒數
+      setCooldownSeconds(30);
+      const timer = setInterval(() => {
+        setCooldownSeconds(prev => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } catch (error: any) {
+      console.error('批量觸發失敗:', error);
+      
+      // 處理429錯誤（冷卻時間）
+      if (error.response?.status === 429) {
+        const errorData = error.response.data;
+        const retryAfter = errorData.retry_after || 30;
+        setTriggerMessage(`⏰ ${errorData.error || '請稍後再試'}`);
+        
+        // 同步冷卻計時器
+        setCooldownSeconds(retryAfter);
+        const timer = setInterval(() => {
+          setCooldownSeconds(prev => {
+            if (prev <= 1) {
+              clearInterval(timer);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      } else if (error.response?.status === 400) {
+        setTriggerMessage('✗ 當前沒有持倉');
+      } else {
+        setTriggerMessage('✗ 批量觸發失敗，請稍後再試');
+      }
+      
+      setTimeout(() => setTriggerMessage(null), 3000);
+    } finally {
+      setIsTriggering(false);
+    }
+  };
+
   if (!selectedTrader) {
     return (
       <div className="space-y-6">
@@ -593,9 +653,38 @@ function TraderDetailsPage({
               </div>
             )}
             {positions && positions.length > 0 && (
-              <div className="text-xs px-3 py-1 rounded" style={{ background: 'rgba(240, 185, 11, 0.1)', color: '#F0B90B', border: '1px solid rgba(240, 185, 11, 0.2)' }}>
-                {positions.length} {t('active', language)}
-              </div>
+              <>
+                <button
+                  onClick={() => handleBatchDecision(selectedTrader.trader_id)}
+                  disabled={isTriggering || cooldownSeconds > 0}
+                  className="px-3 py-1.5 rounded text-xs font-semibold transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{
+                    background: isTriggering || cooldownSeconds > 0
+                      ? 'linear-gradient(135deg, #848E9C 0%, #6B7280 100%)'
+                      : 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)',
+                    color: '#fff',
+                    border: 'none',
+                    cursor: isTriggering || cooldownSeconds > 0 ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)'
+                  }}
+                  title={
+                    cooldownSeconds > 0 
+                      ? `冷卻中，還需 ${cooldownSeconds} 秒` 
+                      : isTriggering 
+                        ? '批量決策執行中...' 
+                        : `批量觸發所有 ${positions.length} 個持倉的AI決策`
+                  }
+                >
+                  {cooldownSeconds > 0 
+                    ? `⏰ ${cooldownSeconds}s` 
+                    : isTriggering 
+                      ? '⏳ 執行中...' 
+                      : `🚀 批量AI決策 (${positions.length})`}
+                </button>
+                <div className="text-xs px-3 py-1 rounded" style={{ background: 'rgba(240, 185, 11, 0.1)', color: '#F0B90B', border: '1px solid rgba(240, 185, 11, 0.2)' }}>
+                  {positions.length} {t('active', language)}
+                </div>
+              </>
             )}
           </div>
         </div>
