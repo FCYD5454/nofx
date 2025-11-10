@@ -396,6 +396,13 @@ func (at *AutoTrader) buildChatPrompt(ctx *decision.Context, recentDecisions []*
 		}
 	}
 	
+	// 注入与“AI 决策”相同的「输入提示」作为上下文（包含完整市场数据、OI、资金费率等）
+	if userCtxPrompt, err := decision.BuildUserPromptForChat(ctx); err == nil {
+		prompt += "\n【输入提示（与AI决策一致的市场上下文）】\n"
+		prompt += userCtxPrompt
+		prompt += "\n"
+	}
+	
 	// 添加最近决策历史
 	if len(recentDecisions) > 0 {
 		prompt += fmt.Sprintf("\n【最近决策历史】（最近 %d 条）\n", len(recentDecisions))

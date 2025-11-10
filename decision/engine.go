@@ -386,6 +386,22 @@ func buildUserPrompt(ctx *Context) string {
 	return sb.String()
 }
 
+// BuildUserPromptForChat 为聊天构建与决策一致的「输入提示」内容（不调用AI）
+// 该方法会填充 ctx 的 MarketDataMap/OITopDataMap，并返回格式化后的输入提示文本
+func BuildUserPromptForChat(ctx *Context) (string, error) {
+	// 确保市场数据可用（与决策路径一致）
+	if err := fetchMarketDataForContext(ctx); err != nil {
+		return "", fmt.Errorf("获取市场数据失败: %w", err)
+	}
+
+	// 直接复用决策用的 user prompt 生成逻辑
+	userPrompt := buildUserPrompt(ctx)
+
+	// 去掉最后一行“现在请分析并输出决策（思维链 + JSON）”，避免在聊天中误导AI
+	trimmed := strings.Replace(userPrompt, "现在请分析并输出决策（思维链 + JSON）", "（聊天模式）", 1)
+	return trimmed, nil
+}
+
 // parseFullDecisionResponse 解析AI的完整决策响应
 func parseFullDecisionResponse(aiResponse string, accountEquity float64, btcEthLeverage, altcoinLeverage int) (*FullDecision, error) {
 	// 1. 提取思维链
