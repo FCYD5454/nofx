@@ -253,6 +253,12 @@ func (at *AutoTrader) Stop() {
 	log.Println("⏹ 自动交易系统停止")
 }
 
+// TriggerManualDecision 手动触发一次AI决策（不受 scan_interval 限制）
+func (at *AutoTrader) TriggerManualDecision() error {
+	log.Printf("👆 手动触发AI决策 - Trader: %s", at.name)
+	return at.runCycle()
+}
+
 // runCycle 运行一个交易周期（使用AI全权决策）
 func (at *AutoTrader) runCycle() error {
 	at.callCount++

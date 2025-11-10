@@ -100,6 +100,7 @@ func (s *Server) setupRoutes() {
 			protected.DELETE("/traders/:id", s.handleDeleteTrader)
 			protected.POST("/traders/:id/start", s.handleStartTrader)
 			protected.POST("/traders/:id/stop", s.handleStopTrader)
+			protected.POST("/traders/:id/trigger-decision", s.handleTriggerManualDecision)
 			protected.PUT("/traders/:id/prompt", s.handleUpdateTraderPrompt)
 
 			// AI模型配置
@@ -589,6 +590,33 @@ func (s *Server) handleStopTrader(c *gin.Context) {
 	
 	log.Printf("⏹  交易员 %s 已停止", trader.GetName())
 	c.JSON(http.StatusOK, gin.H{"message": "交易员已停止"})
+}
+
+// handleTriggerManualDecision 手动触发AI决策
+func (s *Server) handleTriggerManualDecision(c *gin.Context) {
+	traderID := c.Param("id")
+	
+	trader, err := s.traderManager.GetTrader(traderID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "交易员不存在"})
+		return
+	}
+	
+	// 异步执行决策，避免阻塞 HTTP 请求
+	go func() {
+		log.Printf("👆 手动触发决策 - Trader: %s", trader.GetName())
+		if err := trader.TriggerManualDecision(); err != nil {
+			log.Printf("❌ 手动决策执行失败 [%s]: %v", trader.GetName(), err)
+		} else {
+			log.Printf("✓ 手动决策执行成功 [%s]", trader.GetName())
+		}
+	}()
+	
+	c.JSON(http.StatusOK, gin.H{
+		"message": "AI决策已触发，正在执行中...",
+		"trader_id": traderID,
+		"trader_name": trader.GetName(),
+	})
 }
 
 // handleUpdateTraderPrompt 更新交易员自定义Prompt

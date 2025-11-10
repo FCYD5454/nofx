@@ -393,6 +393,28 @@ function TraderDetailsPage({
   lastUpdate: string;
   language: Language;
 }) {
+  const [isTriggering, setIsTriggering] = useState(false);
+  const [triggerMessage, setTriggerMessage] = useState<string | null>(null);
+
+  const handleManualDecision = async (traderId: string) => {
+    if (isTriggering) return;
+    
+    setIsTriggering(true);
+    setTriggerMessage(null);
+    
+    try {
+      await api.triggerManualDecision(traderId);
+      setTriggerMessage('✓ AI決策已觸發！正在執行中...');
+      setTimeout(() => setTriggerMessage(null), 3000);
+    } catch (error) {
+      console.error('觸發決策失敗:', error);
+      setTriggerMessage('✗ 觸發失敗，請稍後再試');
+      setTimeout(() => setTriggerMessage(null), 3000);
+    } finally {
+      setIsTriggering(false);
+    }
+  };
+
   if (!selectedTrader) {
     return (
       <div className="space-y-6">
@@ -517,11 +539,25 @@ function TraderDetailsPage({
           <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: '#EAECEF' }}>
             📈 {t('currentPositions', language)}
           </h2>
-          {positions && positions.length > 0 && (
-            <div className="text-xs px-3 py-1 rounded" style={{ background: 'rgba(240, 185, 11, 0.1)', color: '#F0B90B', border: '1px solid rgba(240, 185, 11, 0.2)' }}>
-              {positions.length} {t('active', language)}
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            {triggerMessage && (
+              <div 
+                className="text-xs px-3 py-1 rounded animate-slide-in"
+                style={{ 
+                  background: triggerMessage.startsWith('✓') ? 'rgba(14, 203, 129, 0.1)' : 'rgba(246, 70, 93, 0.1)', 
+                  color: triggerMessage.startsWith('✓') ? '#0ECB81' : '#F6465D',
+                  border: `1px solid ${triggerMessage.startsWith('✓') ? 'rgba(14, 203, 129, 0.2)' : 'rgba(246, 70, 93, 0.2)'}`
+                }}
+              >
+                {triggerMessage}
+              </div>
+            )}
+            {positions && positions.length > 0 && (
+              <div className="text-xs px-3 py-1 rounded" style={{ background: 'rgba(240, 185, 11, 0.1)', color: '#F0B90B', border: '1px solid rgba(240, 185, 11, 0.2)' }}>
+                {positions.length} {t('active', language)}
+              </div>
+            )}
+          </div>
         </div>
         {positions && positions.length > 0 ? (
           <div className="overflow-x-auto">
@@ -537,6 +573,7 @@ function TraderDetailsPage({
                   <th className="pb-3 font-semibold text-gray-400">{t('leverage', language)}</th>
                   <th className="pb-3 font-semibold text-gray-400">{t('unrealizedPnL', language)}</th>
                   <th className="pb-3 font-semibold text-gray-400">{t('liqPrice', language)}</th>
+                  <th className="pb-3 font-semibold text-gray-400">操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -571,6 +608,25 @@ function TraderDetailsPage({
                     </td>
                     <td className="py-3 font-mono" style={{ color: '#848E9C' }}>
                       {pos.liquidation_price.toFixed(4)}
+                    </td>
+                    <td className="py-3">
+                      <button
+                        onClick={() => handleManualDecision(selectedTrader.trader_id)}
+                        disabled={isTriggering}
+                        className="px-3 py-1.5 rounded text-xs font-semibold transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{
+                          background: isTriggering 
+                            ? 'linear-gradient(135deg, #848E9C 0%, #6B7280 100%)'
+                            : 'linear-gradient(135deg, #F0B90B 0%, #E1A706 100%)',
+                          color: '#000',
+                          border: 'none',
+                          cursor: isTriggering ? 'not-allowed' : 'pointer',
+                          boxShadow: '0 2px 8px rgba(240, 185, 11, 0.3)'
+                        }}
+                        title={isTriggering ? '決策執行中...' : '立即觸發AI決策'}
+                      >
+                        {isTriggering ? '⏳ 執行中...' : '🤖 AI決策'}
+                      </button>
                     </td>
                   </tr>
                 ))}

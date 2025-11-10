@@ -73,6 +73,14 @@ export const api = {
     if (!res.ok) throw new Error('停止交易员失败');
   },
 
+  async triggerManualDecision(traderId: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/traders/${traderId}/trigger-decision`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('触发手动决策失败');
+  },
+
   async updateTraderPrompt(traderId: string, customPrompt: string): Promise<void> {
     const res = await fetch(`${API_BASE}/traders/${traderId}/prompt`, {
       method: 'PUT',
