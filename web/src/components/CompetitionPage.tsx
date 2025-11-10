@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Trophy, Medal } from 'lucide-react';
 import useSWR from 'swr';
 import { api } from '../lib/api';
-import type { CompetitionData } from '../types';
+import type { CompetitionData, TraderInfo } from '../types';
 import { ComparisonChart } from './ComparisonChart';
 import { TraderConfigViewModal } from './TraderConfigViewModal';
 import { getTraderColor } from '../utils/traderColors';
@@ -21,6 +21,17 @@ export function CompetitionPage() {
       refreshInterval: 15000, // 15秒刷新（竞赛数据不需要太频繁更新）
       revalidateOnFocus: false,
       dedupingInterval: 10000,
+    }
+  );
+
+  // 額外抓取當前實際存在的交易員清單，用於過濾排行榜中的殘留項（已刪除但仍在內存的）
+  const { data: traderList } = useSWR<TraderInfo[]>(
+    'traders',
+    api.getTraders,
+    {
+      refreshInterval: 20000,
+      revalidateOnFocus: false,
+      dedupingInterval: 12000,
     }
   );
 
@@ -62,8 +73,14 @@ export function CompetitionPage() {
     );
   }
 
+  // 若獲得了實際 trader 清單，先過濾只保留仍存在的 id，避免顯示已刪除的交易員
+  const existingIds = new Set((traderList || []).map(t => t.trader_id));
+  const visibleTraders = existingIds.size > 0
+    ? competition.traders.filter(t => existingIds.has(t.trader_id))
+    : competition.traders;
+
   // 按收益率排序
-  const sortedTraders = [...competition.traders].sort(
+  const sortedTraders = [...visibleTraders].sort(
     (a, b) => b.total_pnl_pct - a.total_pnl_pct
   );
 
@@ -212,7 +229,7 @@ export function CompetitionPage() {
       </div>
 
       {/* Head-to-Head Stats */}
-      {competition.traders.length === 2 && (
+      {sortedTraders.length === 2 && (
         <div className="binance-card p-5 animate-slide-in" style={{ animationDelay: '0.3s' }}>
           <h2 className="text-lg font-bold mb-4 flex items-center gap-2" style={{ color: '#EAECEF' }}>
             {t('headToHead', language)}
