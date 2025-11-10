@@ -281,7 +281,7 @@ func (at *AutoTrader) TriggerManualDecision() error {
 }
 
 // PreviewDecision 预览AI决策（Dry Run模式，不实际执行交易）
-func (at *AutoTrader) PreviewDecision() (*decision.Decision, error) {
+func (at *AutoTrader) PreviewDecision() (*decision.FullDecision, error) {
 	log.Printf("👁️ 预览AI决策（Dry Run模式）- Trader: %s", at.name)
 	
 	// 1. 收集交易上下文
@@ -300,13 +300,7 @@ func (at *AutoTrader) PreviewDecision() (*decision.Decision, error) {
 		return nil, fmt.Errorf("获取AI决策失败: %w", err)
 	}
 	
-	// 3. 验证决策（不执行）
-	err = decision.ValidateDecision(aiDecision, ctx)
-	if err != nil {
-		log.Printf("⚠️ 决策验证警告: %v", err)
-		// 不返回错误，仍然返回决策让用户查看
-	}
-	
+	// 决策已在 GetFullDecisionWithCustomPrompt 内部验证
 	log.Printf("✓ 预览决策获取成功，包含 %d 个操作", len(aiDecision.Decisions))
 	return aiDecision, nil
 }
@@ -374,14 +368,32 @@ func (at *AutoTrader) buildChatPrompt(ctx *decision.Context, recentDecisions []*
 	
 	// 添加交易表现
 	if ctx.Performance != nil {
-		prompt += fmt.Sprintf("\n【交易表现】\n")
-		prompt += fmt.Sprintf("- 总交易数: %d 笔\n", ctx.Performance.TotalTrades)
-		prompt += fmt.Sprintf("- 胜率: %.1f%% (%d 胜 / %d 负)\n",
-			ctx.Performance.WinRate, ctx.Performance.WinCount, ctx.Performance.LossCount)
-		prompt += fmt.Sprintf("- 平均盈利: %.2f USDT\n", ctx.Performance.AvgWin)
-		prompt += fmt.Sprintf("- 平均亏损: %.2f USDT\n", ctx.Performance.AvgLoss)
-		prompt += fmt.Sprintf("- 盈亏比: %.2f\n", ctx.Performance.ProfitLossRatio)
-		prompt += fmt.Sprintf("- 夏普比率: %.2f\n", ctx.Performance.SharpeRatio)
+		// Performance 是 interface{}，需要类型转换
+		perfMap, ok := ctx.Performance.(map[string]interface{})
+		if ok {
+			prompt += fmt.Sprintf("\n【交易表现】\n")
+			if totalTrades, ok := perfMap["total_trades"].(float64); ok {
+				prompt += fmt.Sprintf("- 总交易数: %d 笔\n", int(totalTrades))
+			}
+			if winRate, ok := perfMap["win_rate"].(float64); ok {
+				winCount, _ := perfMap["win_count"].(float64)
+				lossCount, _ := perfMap["loss_count"].(float64)
+				prompt += fmt.Sprintf("- 胜率: %.1f%% (%d 胜 / %d 负)\n",
+					winRate, int(winCount), int(lossCount))
+			}
+			if avgWin, ok := perfMap["avg_win"].(float64); ok {
+				prompt += fmt.Sprintf("- 平均盈利: %.2f USDT\n", avgWin)
+			}
+			if avgLoss, ok := perfMap["avg_loss"].(float64); ok {
+				prompt += fmt.Sprintf("- 平均亏损: %.2f USDT\n", avgLoss)
+			}
+			if profitLossRatio, ok := perfMap["profit_loss_ratio"].(float64); ok {
+				prompt += fmt.Sprintf("- 盈亏比: %.2f\n", profitLossRatio)
+			}
+			if sharpeRatio, ok := perfMap["sharpe_ratio"].(float64); ok {
+				prompt += fmt.Sprintf("- 夏普比率: %.2f\n", sharpeRatio)
+			}
+		}
 	}
 	
 	// 添加最近决策历史
